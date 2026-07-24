@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { ConfigProvider, theme } from 'antd'
-import { EditOutlined, UnorderedListOutlined, PieChartOutlined } from '@ant-design/icons'
+import { EditOutlined, UnorderedListOutlined, PieChartOutlined, SettingOutlined } from '@ant-design/icons'
 import type { TabKey } from './types'
 import AddExpense from './pages/AddExpense'
 import ExpenseList from './pages/ExpenseList'
 import Statistics from './pages/Statistics'
+import CategoryDrawer from './pages/CategoryDrawer'
 import zhCN from 'antd/locale/zh_CN'
 import './App.css'
 
 function App() {
   const [activeTab, setActiveTab] = useState<TabKey>('add')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const triggerRefresh = () => setRefreshKey((k) => k + 1)
 
@@ -35,6 +37,7 @@ function App() {
         {/* 顶部标题栏 */}
         <header className="app-header">
           <h1 className="app-title">🐴 黑马记账</h1>
+          <SettingOutlined className="header-gear" onClick={() => setDrawerOpen(true)} />
         </header>
 
         {/* 页面内容 */}
@@ -57,6 +60,13 @@ function App() {
             </button>
           ))}
         </nav>
+
+        {/* 分类管理抽屉 */}
+        <CategoryDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          onChanged={triggerRefresh}
+        />
       </div>
     </ConfigProvider>
   )

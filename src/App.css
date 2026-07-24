@@ -32,6 +32,10 @@ body {
   text-align: center;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
 .app-title {
@@ -39,6 +43,25 @@ body {
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 2px;
+}
+
+/* 标题栏齿轮图标 */
+.header-gear {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: #fff;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  opacity: 0.85;
+  transition: opacity 0.2s, transform 0.3s;
+}
+
+.header-gear:hover {
+  opacity: 1;
+  transform: translateY(-50%) rotate(90deg);
 }
 
 /* 内容区 */

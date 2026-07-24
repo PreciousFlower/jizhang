@@ -1,6 +1,7 @@
-import type { RecordItem, CategoryStat, MonthlyStats, RecordType } from '../types'
+import type { RecordItem, CustomCategory, CategoryStat, MonthlyStats, RecordType } from '../types'
 
 const STORAGE_KEY = 'heimajizhang_records'
+const CUSTOM_CAT_KEY = 'heimajizhang_custom_categories'
 
 function readAll(): RecordItem[] {
   try {
@@ -168,6 +169,65 @@ export function getStats(year?: string, month?: string): MonthlyStats | null {
     }
   } catch {
     return null
+  }
+}
+
+// ==================== 自定义分类 CRUD ====================
+
+export function getCustomCategories(): CustomCategory[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_CAT_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCustomCategories(data: CustomCategory[]): void {
+  localStorage.setItem(CUSTOM_CAT_KEY, JSON.stringify(data))
+}
+
+export function addCustomCategory(cat: Omit<CustomCategory, 'id'>): { success: boolean; id?: string; error?: string } {
+  try {
+    const all = getCustomCategories()
+    // 检查同类型下是否重名
+    if (all.some((c) => c.type === cat.type && c.name === cat.name)) {
+      return { success: false, error: '该分类名已存在' }
+    }
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+    const newCat: CustomCategory = { id, ...cat }
+    all.push(newCat)
+    saveCustomCategories(all)
+    return { success: true, id }
+  } catch {
+    return { success: false, error: '保存失败' }
+  }
+}
+
+export function updateCustomCategory(id: string, cat: Omit<CustomCategory, 'id'>): { success: boolean; error?: string } {
+  try {
+    const all = getCustomCategories()
+    const idx = all.findIndex((c) => c.id === id)
+    if (idx === -1) return { success: false, error: '分类不存在' }
+    // 检查同类型下是否与其他分类重名
+    if (all.some((c) => c.id !== id && c.type === cat.type && c.name === cat.name)) {
+      return { success: false, error: '该分类名已存在' }
+    }
+    all[idx] = { id, ...cat }
+    saveCustomCategories(all)
+    return { success: true }
+  } catch {
+    return { success: false, error: '保存失败' }
+  }
+}
+
+export function deleteCustomCategory(id: string): { success: boolean } {
+  try {
+    const all = getCustomCategories()
+    saveCustomCategories(all.filter((c) => c.id !== id))
+    return { success: true }
+  } catch {
+    return { success: false }
   }
 }
 

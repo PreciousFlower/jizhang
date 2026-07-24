@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { addRecord, getAllRecords } from '../database'
+import { addRecord, getAllRecords, getCustomCategories } from '../database'
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../constants/categories'
 import type { RecordItem } from '../types'
 
@@ -7,17 +7,25 @@ import type { RecordItem } from '../types'
 
 const HEADERS = ['类型', '金额', '一级分类', '二级分类', '日期', '备注']
 
-// 构建合法分类映射
+// 构建合法分类映射（预设 + 自定义）
 function buildValidCategories(): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>()
-  // 支出分类
+  // 支出预设分类
   EXPENSE_CATEGORIES.forEach((cat) => {
     map.set(cat.name, new Set(cat.children.map((c) => c.name)))
   })
-  // 收入分类
+  // 收入预设分类
   INCOME_CATEGORIES.forEach((cat) => {
     if (map.has(cat.name)) {
-      // 支出和收入一级分类名不重复，合并
+      const existing = map.get(cat.name)!
+      cat.children.forEach((c) => existing.add(c.name))
+    } else {
+      map.set(cat.name, new Set(cat.children.map((c) => c.name)))
+    }
+  })
+  // 自定义分类
+  getCustomCategories().forEach((cat) => {
+    if (map.has(cat.name)) {
       const existing = map.get(cat.name)!
       cat.children.forEach((c) => existing.add(c.name))
     } else {
@@ -27,18 +35,44 @@ function buildValidCategories(): Map<string, Set<string>> {
   return map
 }
 
-// 构建类型→一级分类映射
+// 构建类型→一级分类映射（预设 + 自定义）
 function buildTypeToCategories(): Map<string, Set<string>> {
   const expenseL1 = new Set(EXPENSE_CATEGORIES.map((c) => c.name))
   const incomeL1 = new Set(INCOME_CATEGORIES.map((c) => c.name))
+  // 自定义分类
+  getCustomCategories().forEach((cat) => {
+    if (cat.type === 'expense') {
+      expenseL1.add(cat.name)
+    } else {
+      incomeL1.add(cat.name)
+    }
+  })
   const map = new Map<string, Set<string>>()
   map.set('支出', expenseL1)
   map.set('收入', incomeL1)
   return map
 }
 
-const VALID_CATEGORIES = buildValidCategories()
-const TYPE_TO_L1 = buildTypeToCategories()
+// 获取所有分类参考行（预设 + 自定义，用于导出模板）
+function buildCategoryRefRows(): { 类型: string; 一级分类: string; 二级分类: string }[] {
+  const rows: { 类型: string; 一级分类: string; 二级分类: string }[] = []
+  EXPENSE_CATEGORIES.forEach((cat) => {
+    cat.children.forEach((sub) => {
+      rows.push({ 类型: '支出', 一级分类: cat.name, 二级分类: sub.name })
+    })
+  })
+  INCOME_CATEGORIES.forEach((cat) => {
+    cat.children.forEach((sub) => {
+      rows.push({ 类型: '收入', 一级分类: cat.name, 二级分类: sub.name })
+    })
+  })
+  getCustomCategories().forEach((cat) => {
+    cat.children.forEach((sub) => {
+      rows.push({ 类型: cat.type === 'income' ? '收入' : '支出', 一级分类: cat.name, 二级分类: sub.name })
+    })
+  })
+  return rows
+}
 
 // ==================== 导出功能 ====================
 
@@ -59,17 +93,7 @@ export function exportToExcel(records: RecordItem[], fileName?: string) {
   const dataSheet = XLSX.utils.json_to_sheet(dataRows)
 
   // 分类参考工作表
-  const catRows: { 类型: string; 一级分类: string; 二级分类: string }[] = []
-  EXPENSE_CATEGORIES.forEach((cat) => {
-    cat.children.forEach((sub) => {
-      catRows.push({ 类型: '支出', 一级分类: cat.name, 二级分类: sub.name })
-    })
-  })
-  INCOME_CATEGORIES.forEach((cat) => {
-    cat.children.forEach((sub) => {
-      catRows.push({ 类型: '收入', 一级分类: cat.name, 二级分类: sub.name })
-    })
-  })
+  const catRows = buildCategoryRefRows()
   const catSheet = XLSX.utils.json_to_sheet(catRows)
 
   const wb = XLSX.utils.book_new()
@@ -179,17 +203,7 @@ export function generateTemplate() {
   const dataSheet = XLSX.utils.json_to_sheet(demoRows)
 
   // 分类参考工作表
-  const catRows: { 类型: string; 一级分类: string; 二级分类: string }[] = []
-  EXPENSE_CATEGORIES.forEach((cat) => {
-    cat.children.forEach((sub) => {
-      catRows.push({ 类型: '支出', 一级分类: cat.name, 二级分类: sub.name })
-    })
-  })
-  INCOME_CATEGORIES.forEach((cat) => {
-    cat.children.forEach((sub) => {
-      catRows.push({ 类型: '收入', 一级分类: cat.name, 二级分类: sub.name })
-    })
-  })
+  const catRows = buildCategoryRefRows()
   const catSheet = XLSX.utils.json_to_sheet(catRows)
 
   const wb = XLSX.utils.book_new()
@@ -252,6 +266,10 @@ export function validateAndImport(rawRows: RawRow[]): ValidateResult {
   const errors: ImportError[] = []
   const validRows: RawRow[] = []
 
+  // 每次校验时重新构建分类映射，确保包含最新自定义分类
+  const validCategories = buildValidCategories()
+  const typeToL1 = buildTypeToCategories()
+
   rawRows.forEach((row, index) => {
     const rowNum = index + 2 // Excel 行号（第1行是表头）
 
@@ -291,7 +309,7 @@ export function validateAndImport(rawRows: RawRow[]): ValidateResult {
     }
 
     // 校验一级分类
-    const validL1ForType = row.type ? TYPE_TO_L1.get(row.type) : null
+    const validL1ForType = row.type ? typeToL1.get(row.type) : null
     if (!row.category_l1) {
       errors.push({ row: rowNum, field: '一级分类', message: '不能为空' })
     } else if (validL1ForType && !validL1ForType.has(row.category_l1)) {
@@ -302,8 +320,8 @@ export function validateAndImport(rawRows: RawRow[]): ValidateResult {
     // 校验二级分类
     if (!row.category_l2) {
       errors.push({ row: rowNum, field: '二级分类', message: '不能为空' })
-    } else if (row.category_l1 && VALID_CATEGORIES.has(row.category_l1)) {
-      const validL2 = VALID_CATEGORIES.get(row.category_l1)!
+    } else if (row.category_l1 && validCategories.has(row.category_l1)) {
+      const validL2 = validCategories.get(row.category_l1)!
       if (!validL2.has(row.category_l2)) {
         const options = Array.from(validL2).join('、')
         errors.push({ row: rowNum, field: '二级分类', message: `"${row.category_l2}" 不属于"${row.category_l1}"（可选：${options}）` })

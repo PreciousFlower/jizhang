@@ -37,3 +37,12 @@ export type TabKey = 'add' | 'list' | 'stats'
 
 // 旧类型别名（向后兼容）
 export type Expense = RecordItem
+
+// 用户自定义分类
+export interface CustomCategory {
+  id: string
+  type: RecordType
+  icon: string
+  name: string
+  children: { name: string }[]
+}

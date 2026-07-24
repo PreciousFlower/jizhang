@@ -1,3 +1,5 @@
+import { getCustomCategories } from '../database'
+
 // 分类结构
 export interface SubCategory {
   name: string
@@ -73,9 +75,16 @@ export const INCOME_CATEGORIES: Category[] = [
   },
 ]
 
-// 根据类型获取分类
+// 根据类型获取分类（预设 + 自定义合并）
 export function getCategories(type: string): Category[] {
-  return type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const preset = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const custom = getCustomCategories().filter((c) => c.type === type)
+  const customMapped: Category[] = custom.map((c) => ({
+    icon: c.icon,
+    name: c.name,
+    children: c.children,
+  }))
+  return [...preset, ...customMapped]
 }
 
 // 根据一级分类名获取二级分类列表
@@ -90,4 +99,16 @@ export function getCategoryIcon(l1Name: string, type: string): string {
   const cats = getCategories(type)
   const cat = cats.find((c) => c.name === l1Name)
   return cat ? cat.icon : '💰'
+}
+
+// 判断是否为预设分类（用于 UI 显示锁定状态）
+export function isPresetCategory(l1Name: string, type: string): boolean {
+  const preset = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  return preset.some((c) => c.name === l1Name)
+}
+
+// 预设分类名列表（用于校验冲突）
+export function getPresetCategoryNames(type: string): string[] {
+  const preset = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  return preset.map((c) => c.name)
 }
